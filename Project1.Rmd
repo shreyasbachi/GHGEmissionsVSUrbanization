@@ -1,0 +1,399 @@
+---
+title: "Analyzing Trends: Greenhouse Gas Emissions vs. Urbanization"
+author: "Shreyas Bachiraju"
+date: "2024-02-11"
+output: 
+  ioslides_presentation:
+    widescreen: true
+    smaller: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+library(dplyr)
+library(forecast)
+library(readr)
+library(tidyr)
+library(plotly)
+library(sf)
+library(rnaturalearth)
+library(viridis)
+
+```
+
+
+
+## Introduction
+
+This presentation delves into the critical relationship between greenhouse gas emissions and the increasing urban population. We will explore how urbanization trends correspond with the changes in greenhouse gas emissions over time.
+
+### Dataset Overview
+
+The analysis is based on data from the **World Development Indicators**. This comprehensive dataset provides a global snapshot of economic, social, and environmental factors, including our key metrics of urban population percentages and greenhouse gas emissions.
+
+
+## Problem Statement
+In today's rapidly urbanizing world, understanding the environmental impacts of urban growth, especially on greenhouse gas (GHG) emissions, is crucial. This study utilizes machine learning principles, employing techniques such as data visualization, clustering, and regression analysis. Its aim is to uncover patterns linking greenhouse gas (GHG) emissions with the percentage of urban population.Our aim is to use these visualization tools to identify key levels of urbanization that significantly impact GHG emissions. The findings from this analysis are vital in shedding light on the role of urbanization in environmental change and are instrumental in evaluating the impact of current urban development strategies on the environment.
+
+
+## Dataset overview
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+data <- read_csv("API_19_DS2_en_csv_v2_6542870.csv", skip = 4)
+head(data)
+
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Reshape the data to long format
+long_data <- data %>%
+  pivot_longer(
+    cols = -c("Country Name", "Country Code", "Indicator Name", "Indicator Code"), # Corrected column names
+    names_to = "Year",
+    values_to = "Value"
+  ) %>%
+  mutate(Year = as.numeric(Year)) # Convert Year to numeric
+```
+
+
+## Bar Plot Code for Emission of Greenhouse Gases Over Time
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+ghg_indicator_code <- 'EN.ATM.GHGT.KT.CE'
+
+# Filter for GHG emissions data
+ghg_data <- long_data %>%
+  filter(`Indicator Code` == ghg_indicator_code) %>%
+  drop_na(Value) # Drop rows where GHG emission values are NA
+
+# Plot GHG emissions over time
+gg_plot <- ggplot(ghg_data, aes(x = Year, y = Value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "GHG Emissions Over Time", x = "Year", y = "Emissions")
+```
+
+## Bar Plot for Emission of Greenhouse Gases Over Time
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+ggplotly(gg_plot)
+
+```
+
+## World Map - Urban Population Percentage
+This is an interactive world map that displays the urban population percentage in 2020.
+```{r urban-pop-map-plot, warning=FALSE, message=FALSE}
+
+urban_pop_indicator_code <- 'SP.URB.TOTL.IN.ZS' # Urban population percentage indicator code
+urban_pop_data_2020 <- long_data %>%
+  filter(`Indicator Code` == 'SP.URB.TOTL.IN.ZS', Year == 2020) %>%
+  drop_na(Value)
+
+# Get the world map data
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Merge urban population data with world map data
+world_urban_pop_2020 <- world %>%
+  left_join(urban_pop_data_2020, by = c("iso_a3" = "Country Code"))
+
+# Exclude rows with NA values in urban population
+world_urban_pop_2020 <- world_urban_pop_2020 %>%
+  filter(!is.na(Value))
+
+# Transform the Value column to percentages if it's not already
+world_urban_pop_2020 <- world_urban_pop_2020 %>%
+  mutate(Value = ifelse(Value > 100, Value / 10, Value)) # This line is just an example; you need to adjust it based on your actual data
+
+# Recreate the map plot using the corrected data
+percent_format <- function(x) {
+  paste0(round(x, 1), "%")
+}
+
+# Recreate the map plot using the corrected data
+world_urban_pop_map_2020 <- ggplot(data = world_urban_pop_2020) +
+  geom_sf(aes(fill = Value), color = "white", size = 0.1) + # Lighter borders to reduce visual noise
+  scale_fill_viridis_c(
+    name = "Urban Population %",
+    na.value = "lightgrey",
+    option = "plasma",
+    limits = c(0, 100), # Set limits from 0 to 100 for percentages
+    labels = percent_format # Use the custom percent formatting function
+  ) +
+  labs(
+    title = "Global Urban Population Percentage in 2020",
+    subtitle = "Hover for details | Data from World Development Indicators",
+    caption = "Note: Values are percentages"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial", size = 10),
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5, vjust = 1),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, vjust = 1),
+    plot.caption = element_text(size = 10, hjust = 0.5, vjust = 1),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = "bottom",
+    legend.box.margin = margin(0, 0, 0, 0),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    panel.border = element_blank(),
+    plot.margin = margin(0, 0, 0, 0)  # Remove plot margin
+  ) +
+  guides(fill = guide_colorbar(
+    title.position = "top",
+    title.hjust = 0.5,
+    barwidth = 7,
+    barheight = 0.5
+  )) +
+  coord_sf()
+
+# Print the map
+ggplotly(world_urban_pop_map_2020)
+
+```
+
+
+## World Map - GHG Emission
+
+This is an interactive world map that displays the global greenhouse gas emissions in 2020.
+```{r world-map-plot, fig.width=8, fig.height=4, echo=FALSE, message=FALSE, warning=FALSE}
+ghg_indicator_code <- 'EN.ATM.GHGT.KT.CE' # Make sure this is your GHG emissions indicator code
+ghg_data_2020 <- long_data %>%
+  filter(`Indicator Code` == 'EN.ATM.GHGT.KT.CE', Year == 2020) %>%
+  drop_na(Value)
+
+# Get the world map data
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Merge GHG data with world map data
+world_ghg_2020 <- world %>%
+  left_join(ghg_data_2020, by = c("iso_a3" = "Country Code"))
+
+# Check how many NAs we have after the join
+num_na <- sum(is.na(world_ghg_2020$Value))
+
+
+# Exclude rows with NA values in emissions
+world_ghg_2020 <- world_ghg_2020 %>%
+  filter(!is.na(Value))
+
+# Create the map plot using a predefined color palette
+breaks <- c(1, 1000, 10000, 100000, 1000000, 10000000)
+
+
+# Create the map plot with ioslides formatting in mind
+world_map_2020 <- ggplot(data = world_ghg_2020) +
+  geom_sf(aes(fill = Value), color = "white", size = 0.25) + # Adjusted the size for country borders
+  scale_fill_viridis_c(
+    name = "GHG Emissions(kt CO2eq)",
+    na.value = "lightgrey",
+    breaks = breaks,
+    labels = labels,
+    trans = "log10"
+  ) +
+  labs(
+    title = "Global GHG Emissions in 2020",
+    subtitle = "Data from World Development Indicators"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial", size = 12), # Changed font family and size
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5, vjust = 1),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 11),
+    legend.text = element_text(size = 11),
+    legend.position = "bottom",
+    legend.box.margin = margin(0, 0, 0, 0), # Adjust legend box margin
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    panel.border = element_blank(), # Remove panel border
+    plot.margin = unit(c(1, 1, 1, 1), "cm") # Adjust plot margin
+  ) +
+  guides(fill = guide_colorbar(
+    title.position = "top",
+    title.hjust = 0.5,
+    barwidth = 7, # Adjusted colorbar width
+    barheight = 0.5
+  )) +
+  coord_sf()
+
+
+# Print the map for the ioslides presentation
+ggplotly(world_map_2020)
+```
+
+
+## Linear Regression Model to Observe GHG Emissions vs. Urban Population
+```{r echo = TRUE, warning=FALSE, message=FALSE, results='hide',fig.show='hide'}
+# Merge GHG emissions and urban population data
+merged_data <- inner_join(ghg_data, urban_pop_data_2020, by = c("Country Code", "Year"), 
+                          suffix = c("_ghg", "_urban"))
+
+ggplot(merged_data, aes(x = Value_urban, y = log1p(Value_ghg))) + # log1p to avoid log(0)
+  geom_jitter(alpha = 0.5, size = 2, width = 0.3, height = 0) +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(
+    title = "GHG Emissions vs. Urban Population %",
+    x = "Urban Population %",
+    y = "Log of GHG Emissions (kt CO2 eq)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom") # Adjust legend position
+```
+
+
+## Linear Regression Model to Observe GHG Emissions vs. Urban Population
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+# Merge GHG emissions and urban population data
+merged_data <- inner_join(ghg_data, urban_pop_data_2020, by = c("Country Code", "Year"), suffix = c("_ghg", "_urban"))
+
+ggplot(merged_data, aes(x = Value_urban, y = log1p(Value_ghg))) + # log1p to avoid log(0)
+  geom_jitter(alpha = 0.5, size = 2, width = 0.3, height = 0) + # Jitter on x-axis and alpha for transparency
+  geom_smooth(method = "lm", color = "blue") +
+  labs(
+    title = "GHG Emissions vs. Urban Population %",
+    x = "Urban Population %",
+    y = "Log of GHG Emissions (kt CO2 eq)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom") # Adjust legend position
+
+```
+
+## Analysis and Conclusion of the Linear Regression Model
+**Analysis:**
+The plot suggests that there's a trend indicating that as the urban population percentage increases, there's a tendency for GHG emissions to increase as well. The slope of the regression line seems positive, which supports this observation. However, the spread of the data points suggests there is variability that isn't captured solely by urban population percentage. Other factors may also influence GHG emissions.
+
+**Conclusion:**
+Based on the plot, we can tentatively conclude that there is a positive association between urban population percentages and GHG emissions. This implies that more urbanized countries tend to have higher GHG emissions. 
+
+
+
+## Correlation Plot Code
+```{r echo = TRUE, warning=FALSE, message=FALSE}
+
+merged_data$Value_urban <- as.numeric(as.character(merged_data$Value_urban))
+merged_data$Value_ghg <- as.numeric(as.character(merged_data$Value_ghg))
+
+# Remove rows with NA values after conversion
+merged_data <- na.omit(merged_data)
+
+# Perform the correlation test on the correct variables
+correlation_result <- cor.test(merged_data$Value_urban, merged_data$Value_ghg, method = "pearson")
+
+# Create a scatter plot with a regression line using the correct dataframe and variables
+correlation_plot <- ggplot(merged_data, aes(x = Value_urban, y = Value_ghg)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(
+    title = "Correlation between Urban Population Percentage and GHG Emissions",
+    x = "Urban Population Percentage",
+    y = "GHG Emissions (kt CO2 eq)"
+  ) +
+  theme_minimal()
+```
+
+
+## Correlation Plot
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+print(paste("Correlation coefficient:", correlation_result$estimate))
+print(paste("P-value:", correlation_result$p.value))
+print(correlation_plot)
+```
+
+## Correlation Plot Analysis and Conclusion
+**Analysis:**
+The scatter plot shows individual data points representing the relationship between the urban population percentage (x-axis) and the GHG emissions (y-axis, not log-transformed in this plot). A linear regression line is also plotted, which shows the average trend in the data.
+From the plot, it seems that there is a large cluster of data points at the lower end of both axes, suggesting that many observations have low urban population percentages and low GHG emissions.
+
+**Conclusion:**
+The correlation coefficient is very low (approximately 0.021), suggesting a very weak linear relationship between urban population percentage and GHG emissions.
+The p-value is high (approximately 0.744), far above the conventional threshold of 0.05, indicating that we do not have evidence to reject the null hypothesis of no correlation.
+The conclusion from this analysis is that there does not appear to be a significant linear relationship between urban population percentage and GHG emissions based on the data provided.
+
+- **Significant** being the key word here - There still does exist a linear relationship, but there are several other factors that have to be taken into account for greenhouse gas emissions.
+
+
+## K-Means Cluster Plot Code
+```{r echo = TRUE, warning=FALSE, message=FALSE, results='hide',fig.show='hide'}
+library(cluster)
+
+# Assuming 'merged_data' contains 'Value_urban' and 'Value_ghg' after merging and cleaning
+
+# Standardize the variables for clustering
+merged_data_scaled <- scale(merged_data[, c("Value_urban", "Value_ghg")])
+
+# Perform k-means clustering with 3 clusters
+set.seed(123) # Set seed for reproducibility
+kmeans_result <- kmeans(merged_data_scaled, centers = 3)
+
+# Add the cluster assignments to your merged data frame
+merged_data$cluster <- as.factor(kmeans_result$cluster)
+
+# Plot the clusters using the original (non-scaled) data for readability
+ggplot(merged_data, aes(x = Value_urban, y = Value_ghg, color = cluster)) +
+  geom_point(alpha = 0.6) +
+  labs(
+    title = "K-means Clustering of Countries by Urbanization and Emissions",
+    x = "Urban Population Percentage",
+    y = "GHG Emissions (kt CO2 eq)"
+  ) +
+  theme_minimal()
+```
+
+## K-Means Cluster Plot
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+library(cluster)
+
+# Assuming 'merged_data' contains 'Value_urban' and 'Value_ghg' after merging and cleaning
+
+# Standardize the variables for clustering
+merged_data_scaled <- scale(merged_data[, c("Value_urban", "Value_ghg")])
+
+# Perform k-means clustering with 3 clusters
+set.seed(123) # Set seed for reproducibility
+kmeans_result <- kmeans(merged_data_scaled, centers = 3)
+
+# Add the cluster assignments to your merged data frame
+merged_data$cluster <- as.factor(kmeans_result$cluster)
+
+# Plot the clusters using the original (non-scaled) data for readability
+ggplot(merged_data, aes(x = Value_urban, y = Value_ghg, color = cluster)) +
+  geom_point(alpha = 0.6) +
+  labs(
+    title = "K-means Clustering of Countries by Urbanization and Emissions",
+    x = "Urban Population Percentage",
+    y = "GHG Emissions (kt CO2 eq)"
+  ) +
+  theme_minimal()
+```
+
+
+## K-Means Cluster Plot Analysis and Conlusion
+**Analysis:**
+The plot visualizes the data points colored according to the cluster they belong to, as determined by the k-means algorithm. We can observe the spread of the data across clusters and how these clusters might correspond to different levels of urban population percentages and GHG emissions.
+There are three distinct clusters, which could potentially represent countries with low, medium, and high urbanization and emissions.
+
+***Cluster 1 (red)*** contains the majority of countries with lower urban population percentages and GHG emissions.
+***Cluster 2 (green)*** includes countries with a higher level of GHG emissions, suggesting that these might be more industrialized or developed countries with significant urban populations.
+***Cluster 3 (blue)*** has fewer countries, but these appear to have the highest GHG emissions, possibly representing the most heavily urbanized and industrialized nations.
+
+
+**Conclusion:**
+The conclusions drawn from this analysis could inform policies targeting GHG emission reductions, taking into account the level of urbanization. The clusters could be further analyzed to determine the characteristics or commonalities of the countries within each cluster, potentially influencing environmental policy and urban planning.
+
+
+## Conclusion
+In summary, our project has applied regression, correlation analysis, and k-means clustering to explore the association between urbanization and greenhouse gas emissions. The regression models have illuminated potential trends, and clustering has categorized countries into meaningful groups based on their urbanization and emissions profiles. However, the correlation analysis did not reveal a strong linear relationship. This suggests that urbanization interacts with other factors to influence emissions, and these relationships are not purely linear or straightforward. Our findings underscore the complexities involved in urban development and its environmental implications, highlighting the necessity for comprehensive and nuanced policy approaches to manage the environmental impact of urban growth.
+
+## References
+
+*World Development Indicators.* (n.d.). [Dataset]. [https://databank.worldbank.org/source/world-development-indicators](https://databank.worldbank.org/source/world-development-indicators)
+
+
