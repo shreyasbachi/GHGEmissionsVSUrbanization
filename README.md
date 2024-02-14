@@ -47,5 +47,5 @@ This project uses the World Development Indicators dataset provided by the World
 ### Author
 Shreyas Bachiraju
 
-###Acknowledgments
+### Acknowledgments
 Thanks to the World Bank for providing the comprehensive World Development Indicators dataset.
